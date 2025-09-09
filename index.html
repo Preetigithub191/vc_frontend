@@ -101,9 +101,12 @@
         localUid = uid;
         statusEl.textContent = `Joined as UID: ${uid}`;
 
-        [localAudioTrack, localVideoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
-        console.log("Local Audio Track:", localAudioTrack);
-console.log("Local Video Track:", localVideoTrack);
+        // [localAudioTrack, localVideoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
+       [localAudioTrack, localVideoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
+  {},
+  { encoderConfig: "1080p", facingMode: "user" } // "user" = front camera, "environment" = back camera
+);
+
 
 
         // Local video
