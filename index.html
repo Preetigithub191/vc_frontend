@@ -37,7 +37,9 @@
   </div>
 
   <!-- Agora SDK from CDN -->
-  <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.8.0.js"></script>
+  <!-- <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.8.0.js"></script> -->
+   <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.2.js"></script>
+
   <script>
     const TOKEN_SERVER_URL = 'https://vedio-call-app-uo3k.onrender.com/token';
 
@@ -100,6 +102,9 @@
         statusEl.textContent = `Joined as UID: ${uid}`;
 
         [localAudioTrack, localVideoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
+        console.log("Local Audio Track:", localAudioTrack);
+console.log("Local Video Track:", localVideoTrack);
+
 
         // Local video
         localPlayer.innerHTML = '';
@@ -116,6 +121,15 @@
         muteBtn.disabled = false;
         joinBtn.disabled = true;
         muteBtn.textContent = 'Mute Audio';
+
+        // ✅ Added safe stats check
+        setInterval(async () => {
+          if (client) {
+            const stats = await client.getRTCStats();
+            console.log("RTC Stats:", stats);
+          }
+        }, 5000);
+
       } catch (err) {
         console.error(err);
         alert('Join error: ' + err.message);
