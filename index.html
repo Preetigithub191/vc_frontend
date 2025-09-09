@@ -1,0 +1,171 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Agora 1-to-1 Video (Mute/Unmute)</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    #videos { display:flex; gap:10px; }
+    video { width: 45%; border: 1px solid #ccc; border-radius:8px; }
+    button { margin-right:8px; padding:8px 12px; }
+    input { padding:6px; margin-right:8px; }
+  </style>
+</head>
+<body>
+  <h2>Agora One-to-One Video</h2>
+
+  <div>
+    <input id="channelInput" placeholder="Channel name" value="testchannel" />
+    <input id="uidInput" placeholder="UID (optional numeric)" />
+    <button id="joinBtn">Join</button>
+    <button id="leaveBtn" disabled>Leave</button>
+    <button id="muteBtn" disabled>Mute Audio</button>
+  </div>
+
+  <p id="status">Not connected</p>
+
+  <div id="videos">
+    <div>
+      <h4>Local</h4>
+      <div id="local-player"></div>
+    </div>
+    <div>
+      <h4>Remote</h4>
+      <div id="remote-player"></div>
+    </div>
+  </div>
+
+  <!-- Agora SDK from CDN -->
+  <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.8.0.js"></script>
+  <script>
+    // Replace this with your token server URL
+    const TOKEN_SERVER_URL = 'https://vedio-call-app-uo3k.onrender.com/token';
+    
+
+    const joinBtn = document.getElementById('joinBtn');
+    const leaveBtn = document.getElementById('leaveBtn');
+    const muteBtn = document.getElementById('muteBtn');
+    const statusEl = document.getElementById('status');
+    const localPlayer = document.getElementById('local-player');
+    const remotePlayer = document.getElementById('remote-player');
+
+    let client, localAudioTrack, localVideoTrack, localUid, joined = false;
+
+    async function fetchToken(channel, uid) {
+      const url = new URL(TOKEN_SERVER_URL);
+      url.searchParams.append('channel', channel);
+      if (uid) url.searchParams.append('uid', uid);
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error('Token fetch failed');
+      return res.json(); // { appId, token, channel, uid }
+    }
+
+    joinBtn.onclick = async () => {
+      const channel = document.getElementById('channelInput').value.trim();
+      const uidInput = document.getElementById('uidInput').value.trim();
+      if (!channel) return alert('Enter channel name');
+
+      try {
+        joinBtn.disabled = true;
+        statusEl.textContent = 'Getting token...';
+
+        const tokenResp = await fetchToken(channel, uidInput || 0);
+        const APP_ID = tokenResp.appId;
+        const TOKEN = tokenResp.token;
+        // Note: server may return uid; we'll use uid 0 to let Agora assign one if necessary.
+
+        // Create client
+        client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+
+        // Subscribe to remote user publish events
+        client.on('user-published', async (user, mediaType) => {
+          await client.subscribe(user, mediaType);
+          console.log('subscribe success', user.uid);
+          if (mediaType === 'video') {
+            const remoteVideoTrack = user.videoTrack;
+            // Clear previous
+            remotePlayer.innerHTML = '';
+            const player = document.createElement('div');
+            player.id = `player-${user.uid}`;
+            remotePlayer.appendChild(player);
+            remoteVideoTrack.play(player);
+          }
+          if (mediaType === 'audio') {
+            const remoteAudioTrack = user.audioTrack;
+            remoteAudioTrack.play(); // plays audio
+          }
+        });
+
+        client.on('user-unpublished', (user, type) => {
+          // remove remote video when user leaves or unpublishes
+          if (type === 'video') {
+            remotePlayer.innerHTML = '';
+          }
+        });
+
+        statusEl.textContent = 'Joining channel...';
+        const uid = await client.join(APP_ID, channel, TOKEN, uidInput ? Number(uidInput) : undefined);
+        localUid = uid;
+        statusEl.textContent = `Joined as UID: ${uid}`;
+
+        // Create local tracks
+        [localAudioTrack, localVideoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
+
+        // Play local video
+        localPlayer.innerHTML = '';
+        const lp = document.createElement('div');
+        lp.id = `local-player-${uid}`;
+        localPlayer.appendChild(lp);
+        localVideoTrack.play(lp);
+
+        // Publish local tracks
+        await client.publish([localAudioTrack, localVideoTrack]);
+        console.log('Published local tracks');
+
+        joined = true;
+        leaveBtn.disabled = false;
+        muteBtn.disabled = false;
+        joinBtn.disabled = true;
+        muteBtn.textContent = 'Mute Audio';
+      } catch (err) {
+        console.error(err);
+        alert('Join error: ' + err.message);
+        joinBtn.disabled = false;
+        statusEl.textContent = 'Not connected';
+      }
+    };
+
+    leaveBtn.onclick = async () => {
+      if (!client) return;
+      try {
+        await client.unpublish();
+        localAudioTrack && localAudioTrack.close();
+        localVideoTrack && localVideoTrack.close();
+        await client.leave();
+        localPlayer.innerHTML = '';
+        remotePlayer.innerHTML = '';
+        statusEl.textContent = 'Left channel';
+      } catch (e) {
+        console.error(e);
+      } finally {
+        joined = false;
+        joinBtn.disabled = false;
+        leaveBtn.disabled = true;
+        muteBtn.disabled = true;
+      }
+    };
+
+    // mute/unmute audio
+    muteBtn.onclick = async () => {
+      if (!localAudioTrack) return;
+      if (localAudioTrack.isMuted) {
+        await localAudioTrack.setEnabled(true); // unmute
+        muteBtn.textContent = 'Mute Audio';
+      } else {
+        await localAudioTrack.setEnabled(false); // mute
+        muteBtn.textContent = 'Unmute Audio';
+      }
+    };
+  </script>
+</body>
+</html>
