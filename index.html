@@ -6,7 +6,8 @@
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; }
     #videos { display:flex; gap:10px; }
-    video { width: 45%; border: 1px solid #ccc; border-radius:8px; }
+    #local-player, #remote-player { width: 45%; }
+    video { width: 100%; height: 300px; border: 1px solid #ccc; border-radius:8px; background: black; }
     button { margin-right:8px; padding:8px 12px; }
     input { padding:6px; margin-right:8px; }
   </style>
@@ -38,9 +39,7 @@
   <!-- Agora SDK from CDN -->
   <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.8.0.js"></script>
   <script>
-    // Replace this with your token server URL
     const TOKEN_SERVER_URL = 'https://vedio-call-app-uo3k.onrender.com/token';
-    
 
     const joinBtn = document.getElementById('joinBtn');
     const leaveBtn = document.getElementById('leaveBtn');
@@ -57,7 +56,7 @@
       if (uid) url.searchParams.append('uid', uid);
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error('Token fetch failed');
-      return res.json(); // { appId, token, channel, uid }
+      return res.json();
     }
 
     joinBtn.onclick = async () => {
@@ -72,35 +71,27 @@
         const tokenResp = await fetchToken(channel, uidInput || 0);
         const APP_ID = tokenResp.appId;
         const TOKEN = tokenResp.token;
-        // Note: server may return uid; we'll use uid 0 to let Agora assign one if necessary.
 
-        // Create client
         client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
 
-        // Subscribe to remote user publish events
         client.on('user-published', async (user, mediaType) => {
           await client.subscribe(user, mediaType);
-          console.log('subscribe success', user.uid);
           if (mediaType === 'video') {
             const remoteVideoTrack = user.videoTrack;
-            // Clear previous
             remotePlayer.innerHTML = '';
-            const player = document.createElement('div');
-            player.id = `player-${user.uid}`;
-            remotePlayer.appendChild(player);
-            remoteVideoTrack.play(player);
+            const videoEl = document.createElement('video');
+            videoEl.autoplay = true;
+            videoEl.playsInline = true;
+            remotePlayer.appendChild(videoEl);
+            remoteVideoTrack.play(videoEl);
           }
           if (mediaType === 'audio') {
-            const remoteAudioTrack = user.audioTrack;
-            remoteAudioTrack.play(); // plays audio
+            user.audioTrack.play();
           }
         });
 
         client.on('user-unpublished', (user, type) => {
-          // remove remote video when user leaves or unpublishes
-          if (type === 'video') {
-            remotePlayer.innerHTML = '';
-          }
+          if (type === 'video') remotePlayer.innerHTML = '';
         });
 
         statusEl.textContent = 'Joining channel...';
@@ -108,19 +99,17 @@
         localUid = uid;
         statusEl.textContent = `Joined as UID: ${uid}`;
 
-        // Create local tracks
         [localAudioTrack, localVideoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
 
-        // Play local video
+        // Local video
         localPlayer.innerHTML = '';
-        const lp = document.createElement('div');
-        lp.id = `local-player-${uid}`;
-        localPlayer.appendChild(lp);
-        localVideoTrack.play(lp);
+        const localVideoEl = document.createElement('video');
+        localVideoEl.autoplay = true;
+        localVideoEl.playsInline = true;
+        localPlayer.appendChild(localVideoEl);
+        localVideoTrack.play(localVideoEl);
 
-        // Publish local tracks
         await client.publish([localAudioTrack, localVideoTrack]);
-        console.log('Published local tracks');
 
         joined = true;
         leaveBtn.disabled = false;
@@ -155,14 +144,13 @@
       }
     };
 
-    // mute/unmute audio
     muteBtn.onclick = async () => {
       if (!localAudioTrack) return;
       if (localAudioTrack.isMuted) {
-        await localAudioTrack.setEnabled(true); // unmute
+        await localAudioTrack.setEnabled(true);
         muteBtn.textContent = 'Mute Audio';
       } else {
-        await localAudioTrack.setEnabled(false); // mute
+        await localAudioTrack.setEnabled(false);
         muteBtn.textContent = 'Unmute Audio';
       }
     };
